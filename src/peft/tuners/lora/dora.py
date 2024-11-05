@@ -171,7 +171,6 @@ class _DoraConvNdLayer(DoraLinearLayer):
 
         return result_dora
 
-
     def __repr__(self) -> str:
         rep = super().__repr__()
         return "lora.dora." + rep
