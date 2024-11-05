@@ -32,6 +32,7 @@ from safetensors.torch import save_file
 from peft import (
     AdaLoraConfig,
     BOFTConfig,
+    BoneConfig,
     FourierFTConfig,
     HRAConfig,
     IA3Config,
@@ -119,6 +120,11 @@ CONFIG_TESTING_KWARGS = (
     {
         "target_modules": None,
     },
+    # Bone
+    {
+        "target_modules": None,
+        "r": 2,
+    },
 )
 
 CLASSES_MAPPING = {
@@ -134,6 +140,7 @@ CLASSES_MAPPING = {
     "hra": (HRAConfig, CONFIG_TESTING_KWARGS[9]),
     "vblora": (VBLoRAConfig, CONFIG_TESTING_KWARGS[10]),
     "oft": (OFTConfig, CONFIG_TESTING_KWARGS[11]),
+    "bone": (BoneConfig, CONFIG_TESTING_KWARGS[12]),
 }
 
 
@@ -732,6 +739,7 @@ class PeftCommonTester:
             PeftType.OFT,
             PeftType.BOFT,
             PeftType.HRA,
+            PeftType.BONE,
         ]
 
         if ("gpt2" in model_id.lower()) and (config_cls == IA3Config):
@@ -1109,7 +1117,7 @@ class PeftCommonTester:
         assert nb_trainable < nb_trainable_all
 
     def _test_training_gradient_checkpointing(self, model_id, config_cls, config_kwargs):
-        if issubclass(config_cls, PromptLearningConfig):
+        if config_cls == PrefixTuningConfig:
             return pytest.skip(f"Test not applicable for {config_cls}")
 
         if (config_cls == AdaLoraConfig) and ("roberta" in model_id.lower()):
@@ -1143,7 +1151,9 @@ class PeftCommonTester:
         loss.backward()
 
         for n, param in model.named_parameters():
-            if model.prefix in n:
+            if "prompt_encoder." in n:  # prompt tuning methods
+                assert param.grad is not None
+            elif hasattr(model, "prefix") and (model.prefix in n):  # non-prompt tuning methods
                 assert param.grad is not None
             else:
                 assert param.grad is None
@@ -1205,6 +1215,7 @@ class PeftCommonTester:
             PeftType.FOURIERFT,
             PeftType.HRA,
             PeftType.VBLORA,
+            PeftType.BONE,
         ]
         # IA3 does not support deleting adapters yet, but it just needs to be added
         # AdaLora does not support multiple adapters
@@ -1253,6 +1264,7 @@ class PeftCommonTester:
             PeftType.FOURIERFT,
             PeftType.HRA,
             PeftType.VBLORA,
+            PeftType.BONE,
         ]
         # IA3 does not support deleting adapters yet, but it just needs to be added
         # AdaLora does not support multiple adapters
@@ -1298,7 +1310,18 @@ class PeftCommonTester:
         model = get_peft_model(model, config)
         model = model.to(self.torch_device)
 
-        if config.peft_type not in ("LORA", "ADALORA", "IA3", "BOFT", "OFT", "VERA", "FOURIERFT", "HRA", "VBLORA"):
+        if config.peft_type not in (
+            "LORA",
+            "ADALORA",
+            "IA3",
+            "BOFT",
+            "OFT",
+            "VERA",
+            "FOURIERFT",
+            "HRA",
+            "VBLORA",
+            "BONE",
+        ):
             with pytest.raises(AttributeError):
                 model = model.unload()
         else:
@@ -1601,8 +1624,8 @@ class PeftCommonTester:
 
         output_peft = get_output(peft_model)
 
-        # first check trivial case is not true that peft does not affect the output; for this to work, init_lora_weight
-        # must be False
+        # first check trivial case is not true that peft does not affect the output; for this to work, init_weight
+        # must be False (if the config supports it)
         if isinstance(peft_model, StableDiffusionPipeline):
             # for SD, check that most pixels have different values
             assert (output_before != output_peft).float().mean() > 0.8

@@ -585,14 +585,19 @@ class Linear(nn.Module, LoraLayer):
                 if not self.use_dora[active_adapter]:
                     result = result + lora_B(lora_A(dropout(x))) * scaling
                 else:
+                    if isinstance(dropout, nn.Identity) or not self.training:
+                        base_result = result
+                    else:
+                        x = dropout(x)
+                        base_result = None
+
                     result = result + self.lora_magnitude_vector[active_adapter](
                         x,
                         lora_A=lora_A,
                         lora_B=lora_B,
                         scaling=scaling,
                         base_layer=self.get_base_layer(),
-                        base_layer_result=result,
-                        dropout=dropout
+                        base_result=base_result,
                     )
 
             result = result.to(torch_result_dtype)
@@ -905,7 +910,6 @@ class _ConvNd(nn.Module, LoraLayer):
         out_kernel = out_stride = (1,) * (self._kernel_dim - 2)
         self.lora_A[adapter_name] = conv_layer(self.in_features, r, kernel_size, stride, padding, bias=False)
         self.lora_B[adapter_name] = conv_layer(r, self.out_features, out_kernel, out_stride, bias=False)
-
         if use_rslora:
             self.scaling[adapter_name] = lora_alpha / math.sqrt(r)
         else:
@@ -1114,14 +1118,13 @@ class _ConvNd(nn.Module, LoraLayer):
                 if not self.use_dora[active_adapter]:
                     result = result + lora_B(lora_A(dropout(x))) * scaling
                 else:
+                    x = dropout(x)
                     result = result + self.lora_magnitude_vector[active_adapter](
                         x,
                         lora_A=lora_A,
                         lora_B=lora_B,
                         scaling=scaling,
                         base_layer=self.get_base_layer(),
-                        base_layer_result=result,
-                        dropout=dropout
                     )
 
             result = result.to(torch_result_dtype)
