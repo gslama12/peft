@@ -874,17 +874,15 @@ class _ConvNd(nn.Module, LoraLayer):
         self._active_adapter = adapter_name
         self._kernel_dim = base_layer.weight.dim()
 
-        if self.base_layer.groups != self.base_layer.in_channels:
-            # lora & dora adapters for dw-conv layers where groups=inputs do not make sense (not parameter efficient)
-            self.update_layer(
-                adapter_name,
-                r,
-                lora_alpha=lora_alpha,
-                lora_dropout=lora_dropout,
-                init_lora_weights=init_lora_weights,
-                use_rslora=use_rslora,
-                use_dora=use_dora,
-            )
+        self.update_layer(
+            adapter_name,
+            r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            init_lora_weights=init_lora_weights,
+            use_rslora=use_rslora,
+            use_dora=use_dora,
+        )
 
     def update_layer(self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora):
         if r <= 0:
